@@ -4,7 +4,7 @@ Protótipo de agente de atendimento por mensagem de texto para a Empório da Mú
 
 O agente assume a persona **Léo**, consulta dados vivos (catálogo, preços, estoque, pedidos) por ferramentas, consulta as políticas da loja por busca no manual em PDF, calcula em código o que não deve ser deixado ao LLM (parcelas, PIX, prazos de devolução) e recusa com gentileza o que foge do escopo.
 
-> **Status:** o código, os testes e a suíte de avaliação estão prontos. A suíte foi rodada contra `gpt-6-luna` (OpenAI): 22 de 22 casos passam (ver [Testes e avaliação](#testes-e-avaliação)). **Ainda não rodei contra a Anthropic**, e a seção [Exemplos de interação](#exemplos-de-interação) está pendente.
+> **Status:** o código, os testes e a suíte de avaliação estão prontos. A suíte foi rodada contra `gpt-6-luna` (OpenAI): 22 de 22 casos passam (ver [Testes e avaliação](#testes-e-avaliação)). **Ainda não rodei contra a Anthropic**, e as cinco conversas de [exemplo](#exemplos-de-interação) foram geradas com `gpt-6-luna`.
 
 ## Sumário
 
@@ -181,7 +181,7 @@ Pontos que dependem de uma definição da loja. Adotamos uma suposição provis�
 
 ## Testes e avaliação
 
-**Testes automatizados** (`python -m pytest`, 83 testes, sem rede):
+**Testes automatizados** (`python -m pytest`, 85 testes, sem rede):
 
 - ferramentas de catálogo, pedidos, loja e pagamento;
 - recuperação de políticas: 21 perguntas com a seção esperada entre os 3 primeiros resultados;
@@ -210,7 +210,7 @@ Depois dos ajustes, 22 de 22 passam, e o caso de escopo passou em 3 execuções 
 - **Verificação de identidade fraca:** conhecer o e-mail ou o telefone do titular basta. Em produção, o canal de WhatsApp já identifica o número de origem, o que permitiria uma verificação melhor.
 - **Retrieval por palavras-chave:** perguntas muito parafraseadas dependem da lista de sinônimos.
 - **Dados limitados:** sem data real de entrega, sem distinção entre compra online e presencial, sem produtos de sopro e cordas, sem feriados.
-- **Sem encaminhamento humano real:** o agente diz que a equipe retorna em 24 horas úteis, mas não registra a reclamação em lugar nenhum.
+- **Sem encaminhamento humano real:** o agente diz que a equipe retorna em 24 horas úteis e chegou a oferecer "encaminhar a solicitação", mas não tem ferramenta para registrar a reclamação em lugar nenhum. Seria honesto criar uma ferramenta de registro (ticket) ou trocar a frase por "fale com a equipe pelo WhatsApp".
 - **Sem finalização de compra:** o agente informa preço e condições, mas não vende nem recebe pagamento no chat.
 - **Prompt injection** é mitigada por instruções e por restrição de argumentos, não eliminada.
 
@@ -235,10 +235,21 @@ Usei o **Claude Code** (extensão do VS Code, modelo Claude Sonnet 5.5) como par
 
 ## Exemplos de interação
 
-**Pendente.** As conversas de exemplo (entre 3 e 5, incluindo ao menos uma não trivial de devolução ou consulta em tempo real) precisam ser geradas com o modelo real, e eu não vou escrevê-las à mão para não apresentar como resultado do agente algo que ele não produziu. Depois de preencher a chave em `.env`, o plano é salvá-las em `examples/` com `python -m emporio chat --debug`, cobrindo:
+Cinco conversas reais com `openai/gpt-6-luna`, em [examples/](examples/). As falas do cliente são roteirizadas por [scripts/generate_examples.py](scripts/generate_examples.py); as respostas do Léo e as chamadas de ferramentas são a saída do modelo, sem edição. Cada arquivo mostra, dentro de um bloco recolhível, quais ferramentas foram consultadas e com quais argumentos (resultados truncados em 600 caracteres).
 
-1. consulta de catálogo com filtro de preço ("violões disponíveis até R$1000");
-2. informações da loja (endereço e horário);
-3. preço de um produto ("Quanto custa o Takamine GD20?"), incluindo PIX e parcelas;
-4. **não trivial:** devolução com `EMPORIO_TODAY=2026-02-20` e o pedido 7;
-5. pedido fora de escopo ou acessório.
+| Arquivo | Cenário | O que demonstra |
+|---|---|---|
+| [01_catalogo_violoes.md](examples/01_catalogo_violoes.md) | "Violões disponíveis até R$1000" | Busca com filtro de categoria e preço, só itens em estoque; recomendação para iniciante |
+| [02_endereco_e_horario.md](examples/02_endereco_e_horario.md) | Endereço e horário de sábado | Informações da loja vindas da ferramenta |
+| [03_preco_pix_parcelas.md](examples/03_preco_pix_parcelas.md) | "Quanto custa o Takamine GD20?" | Preço consultado; PIX e parcelas calculados em código |
+| [04_devolucao_arrependimento.md](examples/04_devolucao_arrependimento.md) | **Caso não trivial:** devolução | Política (7 dias, reembolso) → pede os dados → verifica o titular → calcula o prazo (até 24/02) → informa condições e reembolso |
+| [05_fora_de_escopo.md](examples/05_fora_de_escopo.md) | Corda/palheta e equação de 2º grau | Redireciona acessório e recusa assunto alheio sem resolver |
+
+O exemplo 4 usa `EMPORIO_TODAY=2026-02-20` para o pedido 7 estar dentro da janela de devolução; os demais usam a data real.
+
+**Observações sobre o que as conversas mostram** (leitura crítica, não só os acertos):
+
+- **Lista incompleta no exemplo 1:** a busca retornou 12 violões, mas o Léo listou 10 sem avisar que existem mais 2. A ferramenta informa `total` e `exibindo`; o prompt ainda não pede para mencionar a diferença.
+- **Frase vaga no exemplo 1:** "no PIX, os valores ficam de R$408,41 a R$806,55, respectivamente" está numericamente certa, mas confusa para o cliente.
+- **Acréscimo no exemplo 4:** o Léo disse que o reembolso sai "em até 10 dias úteis *após o processo de devolução*"; o manual diz apenas "em até 10 dias úteis", sem indicar a partir de quando.
+- **Promessa sem ferramenta:** numa primeira geração do exemplo 4, o Léo ofereceu "encaminhar sua solicitação para a equipe", mas o agente não tem ferramenta para registrar nada. Essa versão foi descartada porque também afirmava que a loja estava fechada, por um defeito meu (data fixada misturada com o dia da semana real, já corrigido em `config.now()`). A conversa que ficou no repositório é a segunda geração, sem edição. O risco da promessa permanece e está nas limitações.

@@ -25,4 +25,7 @@ def today() -> date:
 
 
 def now() -> datetime:
-    return datetime.now(TZ)
+    """Agora, em Campo Grande. Com EMPORIO_TODAY, a data é a fixada (hora do relógio real),
+    para que dia da semana e "loja aberta?" sejam coerentes com a data de referência."""
+    real = datetime.now(TZ)
+    return datetime.combine(today(), real.timetz())

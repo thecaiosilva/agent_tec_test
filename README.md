@@ -44,3 +44,14 @@ Agente **híbrido com function calling**: o LLM decide entre ferramentas determi
 - **Pedidos:** só são exibidos mediante verificação (nº do pedido + e-mail **ou** telefone do cliente), por LGPD. Falha de verificação e pedido inexistente dão a mesma resposta.
 - **Feriados** não são modelados no cálculo de "loja aberta agora".
 - Existem categorias de sopro e cordas orquestrais, mas o CSV não tem produtos nelas.
+
+## Pontos de Decisão Para Negócio
+
+Pontos que dependem de uma definição da loja. Adotamos uma suposição provisória em cada um, para o agente funcionar até haver resposta.
+
+| # | Ponto | Suposição atual | Quem decide |
+|---|---|---|---|
+| 1 | **Telefone da loja:** o manual traz (67) 3341-4444 (cabeçalho e dados da empresa) e (67) 3321-4500 (seção WhatsApp). | O primeiro é o telefone da loja e o segundo é o WhatsApp. | Loja |
+| 2 | **Categorias sem produtos:** existem as categorias de sopro (madeiras e metais) e cordas orquestrais, mas o CSV não tem produtos nelas. O manual diz que o catálogo tem mais de 300 instrumentos, e o CSV tem 65. | O agente trabalha só com o que está no CSV. Se perguntarem por sopro ou cordas, informa que não há itens no momento. | Loja |
+| 3 | **Pedido 3 com produto "em breve":** o pedido 3, entregue em 2025, inclui o produto 130, que está como `coming_soon`. | Tratamos como inconsistência dos dados. O pedido é exibido como está, e o produto não é oferecido para compra. | Loja / dados |
+| 4 | **E-mail repetido entre clientes:** há um e-mail duplicado em `customers.csv`, o que pode afetar a verificação de identidade por e-mail. | A verificação usa e-mail ou telefone, e o telefone não tem repetição. | Loja / dados |

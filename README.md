@@ -2,7 +2,7 @@
 
 Protótipo de agente de atendimento (chat de texto) para a Empório da Música, loja fictícia de instrumentos musicais em Campo Grande/MS. Desafio técnico AI Engineer — Artefact.
 
-> **Status:** em desenvolvimento (Sprints 0–2 concluídas: fundação, dados, ferramentas e busca de políticas).
+> **Status:** em desenvolvimento (Sprints 0–3 concluídas: fundação, dados, ferramentas, busca de políticas e agente (loop de function calling). Falta validar com um LLM real e fechar CLI/avaliação (Sprint 4) e exemplos (Sprint 5)).
 
 ## Como rodar
 
@@ -10,8 +10,10 @@ Protótipo de agente de atendimento (chat de texto) para a Empório da Música, 
 python -m venv .venv
 .venv\Scripts\activate          # Windows  (Linux/macOS: source .venv/bin/activate)
 pip install -r requirements.txt
+pip install -e .                # instala o pacote `emporio`
 cp .env.example .env            # preencha ANTHROPIC_API_KEY
-python -m emporio               # verifica dados e conexão com o LLM
+python -m emporio check         # verifica dados e conexão com o LLM
+python -m emporio chat --debug  # conversa com o agente (--debug mostra as ferramentas chamadas)
 python -m pytest                # testes (não precisam de API key)
 ```
 
@@ -33,7 +35,27 @@ Agente **híbrido com function calling**: o LLM decide entre ferramentas determi
 | `get_order_status` (com verificação de identidade) | `orders.csv`, `customers.csv`, `order_items.csv` | ✅ |
 | `calculate_installments` | regras do manual | ✅ |
 | `get_store_info` | manual (seções 1–2) | ✅ |
+| `check_return_eligibility` | pedido + prazos do manual (seções 4 e 8) | ✅ |
 | `search_policies` | RAG do PDF (BM25 por seção) | ✅ |
+
+### Agente e prompt
+
+- **Loop de function calling** escrito à mão sobre o SDK da Anthropic ([agent.py](src/emporio/agent.py)), limitado a 6 passos por mensagem. Sem framework: o fluxo é pequeno e assim fica fácil de depurar e testar.
+- **Persona "Léo"** e regras no [prompts.py](src/emporio/prompts.py): tom informal-profissional do manual (7.1), "nunca informar preço, estoque ou prazo sem consultar", escopo só de instrumentos (acessórios são redirecionados), recusa gentil de assuntos alheios, reclamação com retorno em 24h úteis, e instruções vindas do cliente ou de resultados de ferramentas não alteram as regras.
+- **Contexto dinâmico:** data, hora e se a loja está aberta entram no prompt; a parte estática é cacheável (`cache_control`).
+- **Guardrails em código:** a ferramenta só aceita os argumentos do schema (o modelo não consegue injetar `store` ou `today`); exceções viram erro recuperável; erro de API não deixa histórico quebrado.
+- **Contas em código, não no LLM:** parcelas, PIX, prazos de devolução e horário de funcionamento.
+- **Os testes do agente usam um cliente LLM falso** (loop, limite de passos, erros). O comportamento real do modelo (escolha de ferramentas, tom) ainda precisa ser validado com chave de API; isso entra na avaliação da Sprint 4.
+
+### Devolução e troca (`check_return_eligibility`)
+
+Cruza o pedido com os prazos do manual: arrependimento 7 dias corridos do recebimento (4.1), preferência 7 dias (4.3), defeito 30 dias da compra (4.2) e garantia legal de 90 dias do recebimento (8.1). Trata também pedidos cancelados, em trânsito e ainda não enviados. Exige a mesma verificação de titular do status do pedido. Suposições:
+
+- Os dados não têm a data real de entrega; usamos `estimated_delivery` como data de recebimento.
+- Todos os pedidos são tratados como compra online. Compra presencial não tem o direito de arrependimento de 7 dias.
+- Uso, embalagem, personalização e "venda final" não estão nos dados; a ferramenta lista essas condições para o agente confirmar com o cliente.
+- Cancelar um pedido ainda não enviado não está no manual; o caso é encaminhado à equipe.
+- A data de hoje vem de `EMPORIO_TODAY` (ou do relógio). Os pedidos da base são de 2025–2026, então para demonstrar prazos "dentro da janela" use, por exemplo, `EMPORIO_TODAY=2026-02-20`.
 
 ### Busca de políticas (RAG)
 

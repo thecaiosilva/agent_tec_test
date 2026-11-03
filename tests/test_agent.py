@@ -244,3 +244,20 @@ def test_chave_ausente_gera_mensagem_clara(monkeypatch):
     monkeypatch.setenv("EMPORIO_PROVIDER", "openai")
     with pytest.raises(RuntimeError, match="OPENAI_API_KEY"):
         llm.get_client()
+
+
+def test_cli_compila_e_laco_de_conversa_funciona(monkeypatch, capsys, tmp_path):
+    """__main__ não era importado por nenhum teste e chegou a ser commitado com erro de sintaxe."""
+    from emporio import __main__ as cli, sessions
+
+    monkeypatch.setattr(sessions, "SESSIONS_DIR", tmp_path)
+    saved = []
+    monkeypatch.setattr(sessions, "save", lambda sid, msgs, *a, **k: saved.append((sid, len(msgs))))
+
+    a = Agent(client=FakeClient([use("t1", "get_store_info")], [text("Abrimos às 9h!")]))
+    entradas = iter(["horário?", "", "sessoes", "novo", "sair"])
+    cli.run_chat(a, "s1", debug=True, read=lambda _: next(entradas))
+    out = capsys.readouterr().out
+    assert "Léo: Abrimos às 9h!" in out
+    assert "[tool] get_store_info" in out
+    assert "nova conversa" in out and saved[0][0] == "s1"

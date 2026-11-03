@@ -180,12 +180,13 @@ Pontos que dependem de uma definição da loja. Adotamos uma suposição provis�
 
 ## Testes e avaliação
 
-**Testes automatizados** (`python -m pytest`, 82 testes, sem rede):
+**Testes automatizados** (`python -m pytest`, 83 testes, sem rede):
 
 - ferramentas de catálogo, pedidos, loja e pagamento;
 - recuperação de políticas: 21 perguntas com a seção esperada entre os 3 primeiros resultados;
 - elegibilidade de devolução, incluindo o último dia da janela e o dia seguinte;
 - o adaptador da OpenAI (tradução de mensagens, ferramentas e respostas) e a escolha do provedor;
+- o laço da CLI (comandos `novo`, `sessoes`, `sair` e modo `--debug`);
 - o loop do agente, com um cliente LLM falso: execução de ferramenta, limite de passos, erro de API sem corromper o histórico, janela de contexto e sessões;
 - o avaliador e a consistência dos casos de avaliação.
 

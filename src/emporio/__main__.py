@@ -13,6 +13,8 @@ import sys
 
 from . import config
 
+HELP = "Comandos: 'novo' reinicia a conversa, 'sessoes' lista as salvas, 'sair' encerra."
+
 
 def check() -> None:
     from .data import load_store
@@ -31,23 +33,13 @@ def check() -> None:
         print(f"LLM indisponível: {e}")
 
 
-HELP = "Comandos: 'novo' reinicia a conversa, 'sessoes' lista as salvas, 'sair' encerra."
-
-
-def chat(debug: bool, session: str | None) -> None:
+def run_chat(agent, sid: str, debug: bool, read=input) -> None:
+    """Laço da conversa. `agent` e `read` são injetáveis para teste."""
     from . import sessions
-    from .agent import Agent
 
-    agent = Agent()
-    sid = session or sessions.new_session_id()
-    agent.messages = sessions.load(sid)
-    resumed = bool(agent.messages)
-    print(f"Empório da Música — atendimento (sessão {sid}{', retomada' if resumed else ''}).
-{HELP}
-")
     while True:
         try:
-            text = input("Você: ").strip()
+            text = read("Você: ").strip()
         except (EOFError, KeyboardInterrupt):
             print()
             return
@@ -59,27 +51,34 @@ def chat(debug: bool, session: str | None) -> None:
         if cmd == "novo":
             agent.reset()
             sid = sessions.new_session_id()
-            print(f"(nova conversa, sessão {sid})
-")
+            print(f"(nova conversa, sessão {sid})\n")
             continue
         if cmd == "sessoes":
-            print("Sessões salvas: " + (", ".join(sessions.list_sessions()) or "nenhuma") + "
-")
+            print("Sessões salvas: " + (", ".join(sessions.list_sessions()) or "nenhuma") + "\n")
             continue
         try:
             reply = agent.chat(text)
         except Exception as e:  # noqa: BLE001
-            print(f"[erro] {type(e).__name__}: {e}
-")
+            print(f"[erro] {type(e).__name__}: {e}\n")
             continue
         sessions.save(sid, agent.messages)
         if debug:
             for c in agent.last_calls:
                 print(f"  [tool] {c.name}({json.dumps(c.args, ensure_ascii=False)})")
                 print(f"         -> {json.dumps(c.result, ensure_ascii=False)[:300]}")
-        print(f"
-Léo: {reply}
-")
+        print(f"\nLéo: {reply}\n")
+
+
+def chat(debug: bool, session: str | None) -> None:
+    from . import sessions
+    from .agent import Agent
+
+    agent = Agent()
+    sid = session or sessions.new_session_id()
+    agent.messages = sessions.load(sid)
+    resumed = " (retomada)" if agent.messages else ""
+    print(f"Empório da Música — atendimento, sessão {sid}{resumed}.\n{HELP}\n")
+    run_chat(agent, sid, debug)
 
 
 def main() -> None:

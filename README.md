@@ -2,7 +2,7 @@
 
 Protótipo de agente de atendimento (chat de texto) para a Empório da Música, loja fictícia de instrumentos musicais em Campo Grande/MS. Desafio técnico AI Engineer — Artefact.
 
-> **Status:** em desenvolvimento (Sprints 0–3 concluídas: fundação, dados, ferramentas, busca de políticas e agente (loop de function calling). Falta validar com um LLM real e fechar CLI/avaliação (Sprint 4) e exemplos (Sprint 5)).
+> **Status:** em desenvolvimento (Sprints 0–4 concluídas: fundação, dados, ferramentas, busca de políticas, agente, persistência e suíte de avaliação. Falta rodar a avaliação com um LLM real, ajustar prompt/ferramentas com o resultado e gerar os exemplos de conversa (Sprint 5)).
 
 ## Como rodar
 
@@ -14,6 +14,8 @@ pip install -e .                # instala o pacote `emporio`
 cp .env.example .env            # preencha ANTHROPIC_API_KEY
 python -m emporio check         # verifica dados e conexão com o LLM
 python -m emporio chat --debug  # conversa com o agente (--debug mostra as ferramentas chamadas)
+python -m emporio chat --session cliente1   # retoma (ou cria) uma sessão com histórico salvo
+python -m evals.run_evals       # avaliação com o LLM real (20+ casos)
 python -m pytest                # testes (não precisam de API key)
 ```
 
@@ -46,6 +48,14 @@ Agente **híbrido com function calling**: o LLM decide entre ferramentas determi
 - **Guardrails em código:** a ferramenta só aceita os argumentos do schema (o modelo não consegue injetar `store` ou `today`); exceções viram erro recuperável; erro de API não deixa histórico quebrado.
 - **Contas em código, não no LLM:** parcelas, PIX, prazos de devolução e horário de funcionamento.
 - **Os testes do agente usam um cliente LLM falso** (loop, limite de passos, erros). O comportamento real do modelo (escolha de ferramentas, tom) ainda precisa ser validado com chave de API; isso entra na avaliação da Sprint 4.
+
+### Histórico e sessões
+
+Cada conversa é salva em `sessions/<id>.json` (ignorada pelo Git) após cada resposta, com escrita atômica. `--session NOME` retoma a conversa; sem o argumento, cria uma sessão nova com data e hora. Só os últimos 20 turnos do cliente vão ao modelo (`window`), e o corte nunca separa um `tool_use` do seu `tool_result`, que a API rejeita. O histórico completo continua no arquivo.
+
+### Avaliação
+
+`python -m evals.run_evals` roda 22 casos em conversas novas contra o modelo real e gera `evals/last_run.md`. As checagens são determinísticas, sem LLM-juiz: quais ferramentas foram chamadas (ou proibidas) e padrões esperados ou proibidos na resposta, como o preço calculado ou o nome de um produto esgotado. Os valores esperados são calculados a partir dos CSVs, não digitados. Os casos cobrem catálogo, preço, PIX e parcelas, promoção ativa e vencida, estoque, descontinuado, acessório, assunto fora do escopo, prompt injection, frete, reclamação, devolução (sem dados, no prazo e fora do prazo), pedido de outro cliente e contexto entre turnos. Limite: checar texto por regex não avalia tom nem naturalidade, que exigem leitura humana ou um juiz LLM.
 
 ### Devolução e troca (`check_return_eligibility`)
 

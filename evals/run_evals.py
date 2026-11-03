@@ -80,9 +80,9 @@ def main() -> int:
     ap.add_argument("--model", help="sobrescreve EMPORIO_MODEL")
     args = ap.parse_args()
 
-    from emporio import config
+    from emporio.llm import default_model
 
-    model = args.model or config.MODEL
+    model = args.model or default_model()
     cases = [c for c in CASES if not args.k or args.k in c.id]
     results = []
     for c in cases:

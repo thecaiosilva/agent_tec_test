@@ -5,7 +5,8 @@ import json
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
-from . import config, tools
+from . import tools
+from .llm import default_model
 from .policies import search_policies
 from .prompts import SYSTEM_PROMPT, dynamic_context
 from .returns import check_return_eligibility
@@ -158,7 +159,7 @@ class ToolCall:
 @dataclass
 class Agent:
     client: Any = None
-    model: str = config.MODEL
+    model: str | None = None  # None = padrão do provedor (llm.default_model)
     messages: list[dict] = field(default_factory=list)
     last_calls: list[ToolCall] = field(default_factory=list)  # ferramentas da última mensagem (debug/exemplos)
 
@@ -184,7 +185,7 @@ class Agent:
         try:
             for _ in range(MAX_STEPS):
                 resp = self._client().messages.create(
-                    model=self.model,
+                    model=self.model or default_model(),
                     max_tokens=MAX_TOKENS,
                     system=self._system(),
                     tools=TOOL_SCHEMAS,

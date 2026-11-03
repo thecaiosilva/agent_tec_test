@@ -20,14 +20,14 @@ O agente assume a persona **Léo**, consulta dados vivos (catálogo, preços, es
 
 ## Como rodar
 
-Requisitos: Python 3.11 ou superior e uma chave da API da Anthropic (só para conversar com o agente; os testes não precisam dela).
+Requisitos: Python 3.11 ou superior e uma chave de API da **Anthropic** ou da **OpenAI** (só para conversar com o agente; os testes não precisam de chave).
 
 ```bash
 python -m venv .venv
 .venv\Scripts\activate          # Windows  (Linux/macOS: source .venv/bin/activate)
 pip install -r requirements.txt
 pip install -e .                # instala o pacote `emporio`
-cp .env.example .env            # preencha ANTHROPIC_API_KEY
+cp .env.example .env            # preencha ANTHROPIC_API_KEY ou OPENAI_API_KEY
 ```
 
 | Comando | O que faz |
@@ -45,9 +45,18 @@ Variáveis em `.env`:
 
 | Variável | Descrição |
 |---|---|
-| `ANTHROPIC_API_KEY` | Chave da API do provedor |
-| `EMPORIO_MODEL` | Modelo (padrão `claude-haiku-5-5`) |
+| `EMPORIO_PROVIDER` | `anthropic` ou `openai`. Vazio = usa o que tiver chave (Anthropic primeiro, se as duas existirem) |
+| `ANTHROPIC_API_KEY` | Chave da Anthropic |
+| `OPENAI_API_KEY` | Chave da OpenAI |
+| `OPENAI_BASE_URL` | Opcional. Aponta o provedor `openai` para uma API compatível (Gemini, Groq, OpenRouter, Ollama etc.); defina também `EMPORIO_MODEL` |
+| `EMPORIO_MODEL` | Modelo. Vazio = padrão do provedor (`claude-haiku-5-5` ou `gpt-4o-mini`) |
 | `EMPORIO_TODAY` | Data de referência `AAAA-MM-DD` (vazio = hoje). Afeta os prazos de devolução. |
+
+Exemplo com a OpenAI:
+
+```bash
+EMPORIO_PROVIDER=openai OPENAI_API_KEY=sk-... python -m emporio chat --debug
+```
 
 **Sobre a data:** os pedidos da base são de 2025 e 2026. Com a data real, quase todos estão fora dos prazos de devolução. Para ver uma devolução dentro da janela, use por exemplo `EMPORIO_TODAY=2026-02-20` com o pedido 7.
 
@@ -79,7 +88,8 @@ Código em `src/emporio/`:
 | `pricing.py` | Preço promocional, PIX e parcelamento |
 | `data.py` | Carga e tratamento dos CSVs |
 | `sessions.py` | Histórico de conversa em JSON |
-| `llm.py`, `config.py`, `text.py` | Provedor, configuração e normalização de texto |
+| `llm.py` | Provedores (Anthropic e OpenAI) e adaptador de formato |
+| `config.py`, `text.py` | Configuração e normalização de texto |
 
 ## Decisões técnicas e justificativas
 
@@ -95,7 +105,9 @@ O loop de function calling é escrito à mão sobre o SDK da Anthropic ([agent.p
 
 ### Modelo e provedor
 
-Anthropic via API, com `claude-haiku-5-5` como padrão: o agente depende principalmente de escolher a ferramenta certa e redigir respostas curtas em português, o que um modelo pequeno costuma fazer bem, com baixa latência e custo (importante para um canal de chat com meta de resposta em minutos). `EMPORIO_MODEL=claude-sonnet-5-5` (ou `--model` na avaliação) troca para um modelo maior. **Não comparei os modelos ainda**; a escolha do padrão é uma hipótese a ser confirmada pela suíte de avaliação. O acesso ao provedor está isolado em [llm.py](src/emporio/llm.py).
+Dois provedores suportados, escolhidos por `EMPORIO_PROVIDER`: **Anthropic** (padrão, `claude-haiku-5-5`) e **OpenAI** (padrão `gpt-4o-mini`). `OPENAI_BASE_URL` permite usar APIs compatíveis com o formato da OpenAI. O padrão da Anthropic: o agente depende principalmente de escolher a ferramenta certa e redigir respostas curtas em português, o que um modelo pequeno costuma fazer bem, com baixa latência e custo (importante para um canal de chat com meta de resposta em minutos). `EMPORIO_MODEL` (ou `--model` na avaliação) troca o modelo. **Não comparei os modelos ainda**; os padrões são hipóteses a confirmar pela suíte de avaliação.
+
+O acesso ao provedor está isolado em [llm.py](src/emporio/llm.py). O agente e o histórico salvo usam um único formato de mensagens (blocos `text`, `tool_use` e `tool_result`, o da Anthropic); para a OpenAI, um adaptador traduz mensagens, ferramentas e respostas. Assim, o loop do agente não muda por provedor, e uma sessão pode ser retomada com outro. O adaptador da OpenAI é testado com um cliente falso; **não foi exercitado contra a API real**.
 
 ### Estratégia de prompt
 
@@ -168,11 +180,12 @@ Pontos que dependem de uma definição da loja. Adotamos uma suposição provis�
 
 ## Testes e avaliação
 
-**Testes automatizados** (`python -m pytest`, 77 testes, sem rede):
+**Testes automatizados** (`python -m pytest`, 82 testes, sem rede):
 
 - ferramentas de catálogo, pedidos, loja e pagamento;
 - recuperação de políticas: 21 perguntas com a seção esperada entre os 3 primeiros resultados;
 - elegibilidade de devolução, incluindo o último dia da janela e o dia seguinte;
+- o adaptador da OpenAI (tradução de mensagens, ferramentas e respostas) e a escolha do provedor;
 - o loop do agente, com um cliente LLM falso: execução de ferramenta, limite de passos, erro de API sem corromper o histórico, janela de contexto e sessões;
 - o avaliador e a consistência dos casos de avaliação.
 
@@ -184,7 +197,7 @@ Pontos que dependem de uma definição da loja. Adotamos uma suposição provis�
 
 **Limitações**
 
-- **Sem validação com LLM real** até aqui: escolha de ferramentas, tom e robustez a prompt injection são hipóteses.
+- **Sem validação com LLM real** (nem Anthropic, nem OpenAI) até aqui: escolha de ferramentas, tom e robustez a prompt injection são hipóteses.
 - **Verificação de identidade fraca:** conhecer o e-mail ou o telefone do titular basta. Em produção, o canal de WhatsApp já identifica o número de origem, o que permitiria uma verificação melhor.
 - **Retrieval por palavras-chave:** perguntas muito parafraseadas dependem da lista de sinônimos.
 - **Dados limitados:** sem data real de entrega, sem distinção entre compra online e presencial, sem produtos de sopro e cordas, sem feriados.

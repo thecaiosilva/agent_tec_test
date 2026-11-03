@@ -152,3 +152,95 @@ def test_id_de_sessao_nao_escapa_do_diretorio(tmp_path):
 
     p = sessions.save("../../fora", [], tmp_path)
     assert p.parent == tmp_path
+
+
+# ---------------------------------------------------------------- provedor OpenAI
+
+def _openai_resp(content=None, calls=()):
+    msg = NS(content=content, tool_calls=[
+        NS(id=i, function=NS(name=n, arguments=a)) for i, n, a in calls
+    ] or None)
+    return NS(choices=[NS(message=msg)])
+
+
+class FakeOpenAI:
+    def __init__(self, *responses):
+        self.responses = list(responses)
+        self.calls = []
+        self.chat = NS(completions=self)
+
+    def create(self, **kw):
+        self.calls.append(copy.deepcopy(kw))
+        return self.responses.pop(0)
+
+
+def test_openai_adapter_roda_o_loop_completo():
+    from emporio.llm import OpenAIAdapter
+
+    fake = FakeOpenAI(
+        _openai_resp(calls=[("c1", "get_product", '{"name_or_id": "Takamine GD20"}')]),
+        _openai_resp(content="O GD20 custa R$ 2.199,00."),
+    )
+    a = Agent(client=OpenAIAdapter(fake), model="gpt-x")
+    assert "2.199" in a.chat("quanto custa o Takamine GD20?")
+    assert a.last_calls[0].result["preco_atual"] == 2199
+
+    first, second = fake.calls
+    assert first["model"] == "gpt-x" and first["max_completion_tokens"] == agent_mod.MAX_TOKENS
+    assert first["messages"][0]["role"] == "system" and "Léo" in first["messages"][0]["content"]
+    assert first["tools"][0]["type"] == "function" and "parameters" in first["tools"][0]["function"]
+    # 2ª chamada: assistente com tool_calls + resposta role=tool com o mesmo id
+    roles = [m["role"] for m in second["messages"]]
+    assert roles == ["system", "user", "assistant", "tool"]
+    assert second["messages"][2]["tool_calls"][0]["id"] == "c1"
+    assert second["messages"][3]["tool_call_id"] == "c1"
+
+
+def test_openai_argumentos_invalidos_viram_erro_recuperavel():
+    from emporio.llm import OpenAIAdapter
+
+    fake = FakeOpenAI(_openai_resp(calls=[("c1", "get_product", "{quebrado")]), _openai_resp(content="ok"))
+    a = Agent(client=OpenAIAdapter(fake))
+    assert a.chat("oi") == "ok"
+    assert "erro" in a.last_calls[0].result
+
+
+def test_openai_historico_salvo_no_formato_anthropic_e_reaproveitavel():
+    from emporio.llm import OpenAIAdapter, to_openai_messages
+
+    a = Agent(client=OpenAIAdapter(FakeOpenAI(
+        _openai_resp(calls=[("c1", "get_store_info", "{}")]), _openai_resp(content="Abrimos às 9h."))))
+    a.chat("horário?")
+    assert a.messages[1]["content"][0]["type"] == "tool_use"  # histórico neutro (formato Anthropic)
+    assert [m["role"] for m in to_openai_messages("sys", a.messages)] == ["system", "user", "assistant", "tool", "assistant"]
+
+
+def test_escolha_do_provedor(monkeypatch):
+    from emporio import llm
+
+    for v in ("EMPORIO_PROVIDER", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "EMPORIO_MODEL"):
+        monkeypatch.delenv(v, raising=False)
+    assert llm.provider_name() == "anthropic"
+    monkeypatch.setenv("OPENAI_API_KEY", "x")
+    assert llm.provider_name() == "openai" and llm.default_model() == "gpt-4o-mini"
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "y")
+    assert llm.provider_name() == "anthropic"  # Anthropic tem prioridade quando as duas existem
+    monkeypatch.setenv("EMPORIO_PROVIDER", "openai")
+    assert llm.provider_name() == "openai"
+    monkeypatch.setenv("EMPORIO_MODEL", "meu-modelo")
+    assert llm.default_model() == "meu-modelo"
+    monkeypatch.setenv("EMPORIO_PROVIDER", "foo")
+    import pytest
+    with pytest.raises(RuntimeError):
+        llm.provider_name()
+
+
+def test_chave_ausente_gera_mensagem_clara(monkeypatch):
+    import pytest
+    from emporio import llm
+
+    for v in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY"):
+        monkeypatch.delenv(v, raising=False)
+    monkeypatch.setenv("EMPORIO_PROVIDER", "openai")
+    with pytest.raises(RuntimeError, match="OPENAI_API_KEY"):
+        llm.get_client()

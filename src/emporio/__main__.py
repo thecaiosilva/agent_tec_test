@@ -16,7 +16,7 @@ from . import config
 
 def check() -> None:
     from .data import load_store
-    from .llm import smoke_test
+    from .llm import default_model, provider_name, smoke_test
     from .policies import load_chunks
 
     store = load_store()
@@ -26,7 +26,7 @@ def check() -> None:
         f"Data de referência: {config.today()}"
     )
     try:
-        print(f"LLM ({config.MODEL}) respondeu: {smoke_test()}")
+        print(f"LLM ({provider_name()}/{default_model()}) respondeu: {smoke_test()}")
     except Exception as e:  # noqa: BLE001
         print(f"LLM indisponível: {e}")
 

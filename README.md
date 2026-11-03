@@ -2,7 +2,7 @@
 
 Protótipo de agente de atendimento (chat de texto) para a Empório da Música, loja fictícia de instrumentos musicais em Campo Grande/MS. Desafio técnico AI Engineer — Artefact.
 
-> **Status:** em desenvolvimento (Sprints 0–1 concluídas: fundação, dados e ferramentas determinísticas).
+> **Status:** em desenvolvimento (Sprints 0–2 concluídas: fundação, dados, ferramentas e busca de políticas).
 
 ## Como rodar
 
@@ -33,7 +33,17 @@ Agente **híbrido com function calling**: o LLM decide entre ferramentas determi
 | `get_order_status` (com verificação de identidade) | `orders.csv`, `customers.csv`, `order_items.csv` | ✅ |
 | `calculate_installments` | regras do manual | ✅ |
 | `get_store_info` | manual (seções 1–2) | ✅ |
-| `search_policies` | RAG do PDF | Sprint 2 |
+| `search_policies` | RAG do PDF (BM25 por seção) | ✅ |
+
+### Busca de políticas (RAG)
+
+1. O PDF é lido com `pypdf` em modo *layout*, que preserva tabelas e listas. Cabeçalho e rodapé repetidos são removidos.
+2. O texto é dividido **por seção do manual**: cada subseção (4.1, 4.2, ...) vira um trecho, e seções sem subseção ficam inteiras. Seções que atravessam páginas (ex.: 5.2) ficam íntegras. Cada trecho guarda número, título e seção-pai.
+3. A busca é **BM25** com normalização (sem acento e caixa), radical de 5 letras, remoção de stopwords e **expansão de sinônimos** do vocabulário do cliente ("devolver" → arrependimento/reembolso, "abre" → horário). O título pesa em dobro.
+4. Abaixo de uma relevância mínima, a ferramenta devolve "nenhuma política encontrada" e orienta a encaminhar para a equipe, sem inventar regra.
+5. Inconsistências do manual são resolvidas com **notas internas** anexadas aos trechos (parcelamento, e-mail, telefones).
+
+**Por que BM25 e não embeddings?** O manual tem cerca de 25 trechos e vocabulário bem delimitado. BM25 roda offline, sem custo nem chave de API, é determinístico e fácil de depurar. A desvantagem é depender de sinônimos manuais para perguntas muito parafraseadas. Como a interface `search_policies(query)` esconde o mecanismo, trocar por embeddings (ex.: multilingual-e5 + FAISS) não muda o agente. A qualidade é medida em `tests/test_policies.py` (21 perguntas com a seção esperada).
 
 ## Suposições sobre dados e políticas
 

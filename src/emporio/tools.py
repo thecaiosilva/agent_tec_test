@@ -9,6 +9,7 @@ from datetime import datetime
 
 from . import config
 from .data import Product, Store, get_store, normalize_email, normalize_phone
+from .policies import search_policies  # noqa: F401  (reexportada como ferramenta)
 from .pricing import current_price, installment_options, pix_price
 from .text import compact, normalize, tokens
 

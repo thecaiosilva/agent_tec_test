@@ -103,6 +103,9 @@ class OpenAIAdapter:
 
     def create(self, *, model, max_tokens, system, messages, tools=None, **_ignored):
         kwargs = {"tools": to_openai_tools(tools)} if tools else {}  # a API recusa lista vazia
+        # Modelos de raciocínio (ex.: gpt-6-luna) só aceitam ferramentas em Chat Completions com 'none'.
+        if effort := os.getenv("EMPORIO_REASONING_EFFORT", "").strip():
+            kwargs["reasoning_effort"] = effort
         resp = self._client.chat.completions.create(
             model=model,
             max_completion_tokens=max_tokens,

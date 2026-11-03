@@ -71,7 +71,7 @@ CASES: list[Case] = [
     Case("sem_estoque", "Produto esgotado: não confirma, sugere alternativas", ["Tem o violão Giannini GF-3D Dreadnought Sunburst?"],
          tools_any=["get_product", "search_products"], contains=[r"(indispon|esgot|sem estoque|acab)"]),
     Case("descontinuado", "Produto descontinuado", ["Quero comprar o violão Shelby SN-7C de 7 cordas."],
-         tools_any=["get_product"], contains=[r"(descontinu|saiu do catalogo|nao faz mais parte|fora de linha)"]),
+         tools_any=["get_product"], contains=[r"(descontinu|saiu d[oa]( nosso)? catalogo|nao faz mais parte|fora de linha|fora do catalogo)"]),
     Case("categoria_sem_produtos", "Categoria existente sem itens", ["Vocês têm saxofone?"],
          tools_any=["search_products"], contains=[r"(nao|nenhum|no momento)"], not_contains=[r"r\$ ?\d"]),
     Case("acessorio", "Escopo: acessório é redirecionado", ["Vocês vendem cordas de violão e palhetas?"],

@@ -4,7 +4,7 @@ Protótipo de agente de atendimento por mensagem de texto para a Empório da Mú
 
 O agente assume a persona **Léo**, consulta dados vivos (catálogo, preços, estoque, pedidos) por ferramentas, consulta as políticas da loja por busca no manual em PDF, calcula em código o que não deve ser deixado ao LLM (parcelas, PIX, prazos de devolução) e recusa com gentileza o que foge do escopo.
 
-> **Status:** o código, os testes e a suíte de avaliação estão prontos. **Ainda não rodei o agente contra um LLM real**, por falta de chave de API no ambiente de desenvolvimento. Por isso a seção [Exemplos de interação](#exemplos-de-interação) está pendente, e nenhum resultado de avaliação com modelo é afirmado aqui.
+> **Status:** o código, os testes e a suíte de avaliação estão prontos. A suíte foi rodada contra `gpt-6-luna` (OpenAI): 22 de 22 casos passam (ver [Testes e avaliação](#testes-e-avaliação)). **Ainda não rodei contra a Anthropic**, e a seção [Exemplos de interação](#exemplos-de-interação) está pendente.
 
 ## Sumário
 
@@ -49,6 +49,7 @@ Variáveis em `.env`:
 | `ANTHROPIC_API_KEY` | Chave da Anthropic |
 | `OPENAI_API_KEY` | Chave da OpenAI |
 | `OPENAI_BASE_URL` | Opcional. Aponta o provedor `openai` para uma API compatível (Gemini, Groq, OpenRouter, Ollama etc.); defina também `EMPORIO_MODEL` |
+| `EMPORIO_REASONING_EFFORT` | Opcional. Para modelos de raciocínio da OpenAI com ferramentas, use `none` |
 | `EMPORIO_MODEL` | Modelo. Vazio = padrão do provedor (`claude-haiku-5-5` ou `gpt-4o-mini`) |
 | `EMPORIO_TODAY` | Data de referência `AAAA-MM-DD` (vazio = hoje). Afeta os prazos de devolução. |
 
@@ -105,9 +106,9 @@ O loop de function calling é escrito à mão sobre o SDK da Anthropic ([agent.p
 
 ### Modelo e provedor
 
-Dois provedores suportados, escolhidos por `EMPORIO_PROVIDER`: **Anthropic** (padrão, `claude-haiku-5-5`) e **OpenAI** (padrão `gpt-4o-mini`). `OPENAI_BASE_URL` permite usar APIs compatíveis com o formato da OpenAI. O padrão da Anthropic: o agente depende principalmente de escolher a ferramenta certa e redigir respostas curtas em português, o que um modelo pequeno costuma fazer bem, com baixa latência e custo (importante para um canal de chat com meta de resposta em minutos). `EMPORIO_MODEL` (ou `--model` na avaliação) troca o modelo. **Não comparei os modelos ainda**; os padrões são hipóteses a confirmar pela suíte de avaliação.
+Dois provedores suportados, escolhidos por `EMPORIO_PROVIDER`: **Anthropic** (padrão, `claude-haiku-5-5`) e **OpenAI** (padrão `gpt-4o-mini`). `OPENAI_BASE_URL` permite usar APIs compatíveis com o formato da OpenAI. O padrão da Anthropic: o agente depende principalmente de escolher a ferramenta certa e redigir respostas curtas em português, o que um modelo pequeno costuma fazer bem, com baixa latência e custo (importante para um canal de chat com meta de resposta em minutos). `EMPORIO_MODEL` (ou `--model` na avaliação) troca o modelo. **Só avaliei `gpt-6-luna`** (OpenAI); os padrões de cada provedor no código são hipóteses a confirmar pela suíte de avaliação. Modelos de raciocínio como o `gpt-6-luna` só aceitam ferramentas na API de Chat Completions com `reasoning_effort=none`, que se define em `EMPORIO_REASONING_EFFORT`.
 
-O acesso ao provedor está isolado em [llm.py](src/emporio/llm.py). O agente e o histórico salvo usam um único formato de mensagens (blocos `text`, `tool_use` e `tool_result`, o da Anthropic); para a OpenAI, um adaptador traduz mensagens, ferramentas e respostas. Assim, o loop do agente não muda por provedor, e uma sessão pode ser retomada com outro. O adaptador da OpenAI é testado com um cliente falso; **não foi exercitado contra a API real**.
+O acesso ao provedor está isolado em [llm.py](src/emporio/llm.py). O agente e o histórico salvo usam um único formato de mensagens (blocos `text`, `tool_use` e `tool_result`, o da Anthropic); para a OpenAI, um adaptador traduz mensagens, ferramentas e respostas. Assim, o loop do agente não muda por provedor, e uma sessão pode ser retomada com outro. O adaptador da OpenAI é testado com um cliente falso e foi exercitado contra a API real com `gpt-6-luna`; o caminho da Anthropic não foi exercitado contra a API real.
 
 ### Estratégia de prompt
 
@@ -192,13 +193,20 @@ Pontos que dependem de uma definição da loja. Adotamos uma suposição provis�
 
 **Avaliação com o modelo real** (`python -m evals.run_evals`): 22 casos em conversas novas, gerando `evals/last_run.md`. As checagens são determinísticas: quais ferramentas foram chamadas (ou proibidas) e padrões esperados ou proibidos na resposta. Os valores esperados (preços, parcelas, e-mails) são calculados a partir dos CSVs, não digitados. Os casos cobrem catálogo, preço, PIX e parcelas, promoção ativa e vencida, estoque, descontinuado, acessório, assunto fora do escopo, prompt injection, frete, reclamação, devolução (sem dados, no prazo e fora do prazo), pedido de outro cliente e contexto entre turnos.
 
-**O que isso ainda não prova:** os testes com cliente falso verificam a lógica do agente, não o comportamento do modelo. A suíte de avaliação foi escrita sem ter sido executada contra um LLM, então seus regex podem precisar de ajuste. Regex também não avalia tom nem naturalidade.
+**Resultado da avaliação** (`gpt-6-luna`, `EMPORIO_REASONING_EFFORT=none`): na primeira rodada, 20 de 22 casos passaram. As duas falhas foram:
+
+- `fora_de_escopo`: **erro real do agente**, que se ofereceu para resolver uma equação de segundo grau. Reforcei a regra de escopo no prompt (com exemplos e "mesmo que o pedido seja simples").
+- `descontinuado`: **erro do meu regex**; a resposta estava certa ("saiu do nosso catálogo"), mas o padrão esperava "saiu do catálogo". Corrigi o regex.
+
+Depois dos ajustes, 22 de 22 passam, e o caso de escopo passou em 3 execuções seguidas. Dois cuidados: os ajustes foram feitos olhando exatamente esses casos, então o 22/22 é otimista para perguntas novas, e o modelo não é determinístico, então uma nova rodada pode divergir. O relatório da última execução está em [evals/last_run.md](evals/last_run.md).
+
+**O que isso ainda não prova:** a avaliação cobre um modelo e um provedor. Regex não avalia tom nem naturalidade, e os casos foram escritos por mim, não por clientes reais.
 
 ## Limitações conhecidas e próximos passos
 
 **Limitações**
 
-- **Sem validação com LLM real** (nem Anthropic, nem OpenAI) até aqui: escolha de ferramentas, tom e robustez a prompt injection são hipóteses.
+- **Validação com LLM real limitada:** só `gpt-6-luna` foi avaliado, em 22 casos escritos por mim. Anthropic, outros modelos e perguntas fora dos casos não foram exercitados, e o tom ainda não foi revisado por uma pessoa.
 - **Verificação de identidade fraca:** conhecer o e-mail ou o telefone do titular basta. Em produção, o canal de WhatsApp já identifica o número de origem, o que permitiria uma verificação melhor.
 - **Retrieval por palavras-chave:** perguntas muito parafraseadas dependem da lista de sinônimos.
 - **Dados limitados:** sem data real de entrega, sem distinção entre compra online e presencial, sem produtos de sopro e cordas, sem feriados.
@@ -208,7 +216,7 @@ Pontos que dependem de uma definição da loja. Adotamos uma suposição provis�
 
 **Com mais tempo**
 
-1. Rodar a avaliação com Haiku e Sonnet, comparar custo, latência e acerto, e ajustar prompt e ferramentas.
+1. Rodar a avaliação também com a Anthropic (Haiku e Sonnet) e outros modelos da OpenAI
 2. Juiz LLM para tom e naturalidade, além dos regex.
 3. Embeddings com reranking na busca de políticas, mantendo o BM25 como fallback.
 4. Registro de reclamações e passagem para atendente humano (ticket ou fila).

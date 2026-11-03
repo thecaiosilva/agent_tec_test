@@ -42,13 +42,16 @@ def run_case(case: Case, agent_factory=Agent) -> dict:
     prev = os.environ.get("EMPORIO_TODAY")
     if case.today:
         os.environ["EMPORIO_TODAY"] = case.today
+    called: list[str] = []
+    reply = ""
     try:
         agent = agent_factory()
-        called: list[str] = []
-        reply = ""
         for turn in case.turns:
             reply = agent.chat(turn)
             called += [c.name for c in agent.last_calls]
+    except Exception as e:  # noqa: BLE001 — erro de API num caso não derruba a suíte
+        return {"case": case, "called": called, "reply": "",
+                "fails": [f"erro ao executar: {type(e).__name__}: {str(e)[:300]}"]}
     finally:
         if case.today:
             if prev is None:

@@ -2,6 +2,7 @@
 
     python -m emporio            # conversa (padrão)
     python -m emporio chat --debug
+    python -m emporio chat --session cliente1   # retoma/cria sessão com histórico salvo
     python -m emporio check      # verifica dados e conexão com o LLM
 """
 from __future__ import annotations
@@ -30,11 +31,20 @@ def check() -> None:
         print(f"LLM indisponível: {e}")
 
 
-def chat(debug: bool) -> None:
+HELP = "Comandos: 'novo' reinicia a conversa, 'sessoes' lista as salvas, 'sair' encerra."
+
+
+def chat(debug: bool, session: str | None) -> None:
+    from . import sessions
     from .agent import Agent
 
     agent = Agent()
-    print("Empório da Música — atendimento. Digite 'sair' para encerrar, 'novo' para reiniciar a conversa.\n")
+    sid = session or sessions.new_session_id()
+    agent.messages = sessions.load(sid)
+    resumed = bool(agent.messages)
+    print(f"Empório da Música — atendimento (sessão {sid}{', retomada' if resumed else ''}).
+{HELP}
+")
     while True:
         try:
             text = input("Você: ").strip()
@@ -43,22 +53,33 @@ def chat(debug: bool) -> None:
             return
         if not text:
             continue
-        if text.lower() in {"sair", "exit", "quit"}:
+        cmd = text.lower()
+        if cmd in {"sair", "exit", "quit"}:
             return
-        if text.lower() == "novo":
+        if cmd == "novo":
             agent.reset()
-            print("(conversa reiniciada)\n")
+            sid = sessions.new_session_id()
+            print(f"(nova conversa, sessão {sid})
+")
+            continue
+        if cmd == "sessoes":
+            print("Sessões salvas: " + (", ".join(sessions.list_sessions()) or "nenhuma") + "
+")
             continue
         try:
             reply = agent.chat(text)
         except Exception as e:  # noqa: BLE001
-            print(f"[erro] {type(e).__name__}: {e}\n")
+            print(f"[erro] {type(e).__name__}: {e}
+")
             continue
+        sessions.save(sid, agent.messages)
         if debug:
             for c in agent.last_calls:
                 print(f"  [tool] {c.name}({json.dumps(c.args, ensure_ascii=False)})")
                 print(f"         -> {json.dumps(c.result, ensure_ascii=False)[:300]}")
-        print(f"\nLéo: {reply}\n")
+        print(f"
+Léo: {reply}
+")
 
 
 def main() -> None:
@@ -68,12 +89,13 @@ def main() -> None:
     sub = parser.add_subparsers(dest="cmd")
     c = sub.add_parser("chat", help="conversar com o agente")
     c.add_argument("--debug", action="store_true", help="mostra as ferramentas chamadas")
+    c.add_argument("--session", help="id da sessão: retoma se existir, senão cria com esse nome")
     sub.add_parser("check", help="verifica dados e conexão com o LLM")
     args = parser.parse_args()
     if args.cmd == "check":
         check()
     else:
-        chat(getattr(args, "debug", False))
+        chat(getattr(args, "debug", False), getattr(args, "session", None))
 
 
 if __name__ == "__main__":

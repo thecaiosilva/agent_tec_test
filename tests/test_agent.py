@@ -106,3 +106,49 @@ def test_reset():
     a.chat("oi")
     a.reset()
     assert a.messages == []
+
+
+# ---------------------------------------------------------------- janela e persistência
+
+def _turno(i):
+    return [
+        {"role": "user", "content": f"msg{i}"},
+        {"role": "assistant", "content": [{"type": "tool_use", "id": f"t{i}", "name": "get_store_info", "input": {}}]},
+        {"role": "user", "content": [{"type": "tool_result", "tool_use_id": f"t{i}", "content": "{}"}]},
+        {"role": "assistant", "content": [{"type": "text", "text": f"r{i}"}]},
+    ]
+
+
+def test_janela_corta_so_em_mensagem_do_cliente():
+    msgs = [m for i in range(5) for m in _turno(i)]
+    w = agent_mod.window(msgs, max_turns=2)
+    assert w[0] == {"role": "user", "content": "msg3"}  # nunca começa num tool_result
+    assert len(w) == 8
+    assert agent_mod.window(msgs, max_turns=10) is msgs
+
+
+def test_sessao_salva_e_retoma(tmp_path):
+    from emporio import sessions
+
+    a = Agent(client=FakeClient([use("t1", "get_store_info")], [text("Abrimos às 9h.")]))
+    a.chat("que horas abrem?")
+    sessions.save("s1", a.messages, tmp_path)
+    b = Agent(client=FakeClient([text("De nada!")]))
+    b.messages = sessions.load("s1", tmp_path)
+    assert b.chat("valeu") == "De nada!"
+    assert b.messages[0]["content"] == "que horas abrem?" and len(b.messages) == 6
+
+
+def test_sessao_inexistente_ou_corrompida(tmp_path):
+    from emporio import sessions
+
+    assert sessions.load("nao-existe", tmp_path) == []
+    (tmp_path / "ruim.json").write_text("{quebrado", encoding="utf-8")
+    assert sessions.load("ruim", tmp_path) == []
+
+
+def test_id_de_sessao_nao_escapa_do_diretorio(tmp_path):
+    from emporio import sessions
+
+    p = sessions.save("../../fora", [], tmp_path)
+    assert p.parent == tmp_path

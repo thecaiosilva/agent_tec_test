@@ -12,6 +12,7 @@ from .returns import check_return_eligibility
 
 MAX_STEPS = 6  # idas e voltas modelo<->ferramentas por mensagem do cliente
 MAX_TOKENS = 1024
+MAX_TURNS = 20  # mensagens do cliente mantidas na janela enviada ao modelo
 FALLBACK = (
     "Desculpa, tive um probleminha aqui para finalizar sua consulta. "
     "Pode repetir ou, se preferir, chamar a nossa equipe pelo WhatsApp (67) 3321-4500?"
@@ -187,7 +188,7 @@ class Agent:
                     max_tokens=MAX_TOKENS,
                     system=self._system(),
                     tools=TOOL_SCHEMAS,
-                    messages=self.messages,
+                    messages=window(self.messages),
                 )
                 blocks = [d for b in resp.content if (d := _block_to_dict(b))]
                 self.messages.append({"role": "assistant", "content": blocks})
@@ -223,6 +224,15 @@ class Agent:
 def _is_failure(out: dict) -> bool:
     """Falha de execução (is_error). Erros de negócio, como verificação negada, não contam."""
     return str(out.get("erro", "")).startswith(("Falha ao executar", "Ferramenta desconhecida"))
+
+
+def window(messages: list[dict], max_turns: int = MAX_TURNS) -> list[dict]:
+    """Últimos `max_turns` turnos do cliente, cortando só em mensagem de texto do cliente
+    (nunca no meio de um par tool_use/tool_result, que a API rejeita)."""
+    starts = [i for i, m in enumerate(messages) if m["role"] == "user" and isinstance(m["content"], str)]
+    if len(starts) <= max_turns:
+        return messages
+    return messages[starts[-max_turns]:]
 
 
 def _block_to_dict(b) -> dict:

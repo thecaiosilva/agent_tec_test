@@ -258,36 +258,46 @@ _NOT_FOUND = {
 }
 
 
+def verify_order(order_id, email, phone, store: Store):
+    """Retorna (order, customer, None) se o titular foi verificado; senão (None, None, erro).
+
+    Pedido inexistente e verificação falha retornam a MESMA mensagem para não
+    permitir descobrir quais números de pedido existem (LGPD).
+    """
+    try:
+        oid = int(str(order_id).strip().lstrip("#"))
+    except ValueError:
+        return None, None, dict(_NOT_FOUND)
+
+    if not email and not phone:
+        return None, None, {
+            "erro": "Para consultar o pedido, preciso do e-mail ou do telefone cadastrado na compra."
+        }
+
+    order = store.orders.get(oid)
+    customer = store.customers.get(order.customer_id) if order else None
+    if not order or not customer:
+        return None, None, dict(_NOT_FOUND)
+
+    ok = (email and normalize_email(email) == customer.email) or (
+        phone and normalize_phone(phone) == normalize_phone(customer.phone)
+    )
+    if not ok:
+        return None, None, dict(_NOT_FOUND)
+    return order, customer, None
+
+
 def get_order_status(
     order_id: int | str,
     email: str | None = None,
     phone: str | None = None,
     store: Store | None = None,
 ) -> dict:
-    """Status de pedido. Exige verificação: e-mail OU telefone do titular (LGPD).
-
-    Pedido inexistente e verificação falha retornam a MESMA mensagem para não
-    permitir descobrir quais números de pedido existem.
-    """
+    """Status de pedido. Exige verificação: e-mail OU telefone do titular."""
     store = store or get_store()
-    try:
-        oid = int(str(order_id).strip().lstrip("#"))
-    except ValueError:
-        return dict(_NOT_FOUND)
-
-    if not email and not phone:
-        return {"erro": "Para consultar o pedido, preciso do e-mail ou do telefone cadastrado na compra."}
-
-    order = store.orders.get(oid)
-    customer = store.customers.get(order.customer_id) if order else None
-    if not order or not customer:
-        return dict(_NOT_FOUND)
-
-    ok = (email and normalize_email(email) == customer.email) or (
-        phone and normalize_phone(phone) == normalize_phone(customer.phone)
-    )
-    if not ok:
-        return dict(_NOT_FOUND)
+    order, customer, err = verify_order(order_id, email, phone, store)
+    if err:
+        return err
 
     out: dict = {
         "pedido": order.order_id,

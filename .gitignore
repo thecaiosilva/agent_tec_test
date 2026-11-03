@@ -6,3 +6,6 @@ __pycache__/
 *.egg-info/
 .chroma/
 sessions/
+
+# PDFs do desafio (enunciado e manual) não são versionados
+*.pdf

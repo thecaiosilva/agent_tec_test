@@ -4,6 +4,12 @@ from emporio import policies
 from emporio.policies import get_index, load_chunks, search_policies
 
 
+pytestmark = pytest.mark.skipif(
+    not policies.pdf_available(),
+    reason="manual 'políticas_da_loja.pdf' ausente em data/ (o PDF não é versionado)",
+)
+
+
 def test_chunking_cobre_manual():
     secoes = {c.section for c in load_chunks()}
     assert {"2", "3.1", "4.1", "4.2", "4.3", "4.4", "5.1", "5.2", "5.3", "6.2", "7.1", "7.3", "8.1", "9"} <= secoes

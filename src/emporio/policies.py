@@ -31,8 +31,19 @@ def find_pdf(data_dir: Path = DATA_DIR) -> Path:
     # glob evita problemas com a normalização unicode de "políticas" no nome
     matches = sorted(p for p in data_dir.glob("*.pdf") if "tica" in normalize(p.name))
     if not matches:
-        raise FileNotFoundError(f"PDF de políticas não encontrado em {data_dir}")
+        raise FileNotFoundError(
+            f"Manual de políticas não encontrado. Coloque o arquivo 'políticas_da_loja.pdf' "
+            f"(entregue com o desafio; não é versionado neste repositório) em {data_dir}"
+        )
     return matches[0]
+
+
+def pdf_available(data_dir: Path = DATA_DIR) -> bool:
+    try:
+        find_pdf(data_dir)
+        return True
+    except FileNotFoundError:
+        return False
 
 
 def extract_text(pdf_path: Path) -> str:

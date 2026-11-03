@@ -22,12 +22,15 @@ O agente assume a persona **Léo**, consulta dados vivos (catálogo, preços, es
 
 Requisitos: Python 3.11 ou superior e uma chave de API da **Anthropic** ou da **OpenAI** (só para conversar com o agente; os testes não precisam de chave).
 
+**Importante: os PDFs não estão neste repositório.** O manual `políticas_da_loja.pdf`, entregue junto com o desafio, precisa ser copiado para `data/` antes de usar o agente (os CSVs já estão em `data/`). Sem ele, o agente funciona para catálogo e pedidos, mas a busca de políticas informa que o manual não foi encontrado, e os testes de políticas são pulados.
+
 ```bash
 python -m venv .venv
 .venv\Scripts\activate          # Windows  (Linux/macOS: source .venv/bin/activate)
 pip install -r requirements.txt
 pip install -e .                # instala o pacote `emporio`
 cp .env.example .env            # preencha ANTHROPIC_API_KEY ou OPENAI_API_KEY
+cp /caminho/do/políticas_da_loja.pdf data/   # manual de políticas (não versionado)
 ```
 
 | Comando | O que faz |

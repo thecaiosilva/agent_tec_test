@@ -22,10 +22,13 @@ def check() -> None:
     from .policies import load_chunks
 
     store = load_store()
+    try:
+        politicas = f"{len(load_chunks())} trechos de política"
+    except FileNotFoundError as e:
+        politicas = f"POLÍTICAS INDISPONÍVEIS ({e})"
     print(
         f"Dados OK: {len(store.products)} produtos, {len(store.orders)} pedidos, "
-        f"{len(store.customers)} clientes, {len(load_chunks())} trechos de política. "
-        f"Data de referência: {config.today()}"
+        f"{len(store.customers)} clientes, {politicas}. Data de referência: {config.today()}"
     )
     try:
         print(f"LLM ({provider_name()}/{default_model()}) respondeu: {smoke_test()}")
